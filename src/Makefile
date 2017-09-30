@@ -33,5 +33,6 @@ depend:
 
 # DO NOT DELETE THIS LINE
 
+client.o: logger.h singleton.h
 config.o: config.h singleton.h
-logger.o: logger.h config.h singleton.h
+logger.o: logger.h singleton.h config.h
