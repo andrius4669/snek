@@ -1,0 +1,17 @@
+tooling:
+  SDL2 - to provide 2d drawing primitives
+  SDL2_image - for images
+  for fonts, possibly SDL_ttf
+  do we need sound? probably not yet. SDL_mixer if later need it.
+  this gonna be 2D game so we'll probably be fine by not using OpenGL but relying on SDL to provide proper drawing stuff.
+build system?
+  need to support windows and linux. cmake? unsure if raw makefiles would work well for this.
+  which ide to use in windows? should talk well with build system... qtcreator? code::blocks?
+  visual studio would work too if we use separate build system for it.. which is probably doable aswell.
+networking stuff?
+  if we have time, could do. enet for networking code, flatbuffers for packing should be good.
+structure:
+  to be decided.
+layout:
+  .cpp/.h files in src/ folder;
+  images/other additional data in data/ folder;
