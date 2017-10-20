@@ -2,7 +2,7 @@ MV=mv
 
 CXXSTD= -std=c++11
 CXXFLAGS= $(CXXSTD) -O2
-CXXINCLUDE= `sdl-config --cflags`
+CXXINCLUDE= `sdl2-config --cflags`
 LDFLAGS= `sdl2-config --libs`
 CLIENTOBJ= \
 	client.o \
