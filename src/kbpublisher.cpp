@@ -13,6 +13,8 @@ void KeyboardPublisher::unsubscribe(subscriber_t ks,int key)
 			break;
 		auto oit = r.first;
 		++r.first;
+		if (oit->second != ks)
+			continue;
 		subscribers.erase(oit);
 	}
 }
