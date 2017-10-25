@@ -7,7 +7,8 @@ LDFLAGS= `sdl2-config --libs`
 CLIENTOBJ= \
 	client.o \
 	logger.o \
-	config.o
+	config.o \
+	kbpublisher.o
 
 ALLO= $(sort $(CLIENTOBJ))
 ALLC= $(patsubst %.o,%.cpp,$(filter %.o %.cpp,$(ALLO)))
