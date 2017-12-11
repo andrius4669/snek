@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include "logger.h"
 #include "kbsubscriber.h"
+#include "kbpublisher.h"
 
 #include <memory>
 #include <vector>
@@ -97,24 +98,58 @@ private:
 } ;
 
 enum {
-	DIR_LEFT,
+	DIR_LEFT = 0,
 	DIR_RIGHT,
 	DIR_UP,
 	DIR_DOWN,
+	DIR_NUM
+} ;
+
+struct KeyboardMapper {
+	KeyboardMapper(SDL_Scancode l,SDL_Scancode r,SDL_Scancode u,SDL_Scancode d)
+	{
+		codes[DIR_LEFT] = l;
+		codes[DIR_RIGHT] = r;
+		codes[DIR_UP] = u;
+		codes[DIR_DOWN] = d;
+	}
+
+	void subscribe(KeyboardPublisher pub,KeyboardPublisher::subscriber_t sub)
+	{
+		pub.subscribe(sub,codes[DIR_LEFT]);
+		pub.subscribe(sub,codes[DIR_RIGHT]);
+		pub.subscribe(sub,codes[DIR_UP]);
+		pub.subscribe(sub,codes[DIR_DOWN]);
+	}
+	
+	int getDirection(SDL_Scancode scan) const
+	{
+		for (int i = 0;i < DIR_NUM;++i) {
+			if (codes[i] == scan)
+				return i;
+		}
+		return -1;
+	}
+private:
+	SDL_Scancode codes[DIR_NUM];
 } ;
 
 struct PlayerHead: FieldObject,KeyboardSubscriber {
 	virtual size_t getTexture() const { return texture; }
 	virtual int getHardness() const { return 1; }
 	virtual bool isDead() const { return dead; }
-	virtual void update(int key)
+
+	virtual void update(SDL_Scancode scan)
 	{
-		if (!directions.empty() && directions.back() == key)
+		int dir = kbmapper.getDirection(scan);
+		assert(dir >= 0);
+		if (!directions.empty() && directions.back() == dir)
 			return;
 		if (dead)
 			return;
-		directions.push(key);
+		directions.push(dir);
 	}
+
 	virtual bool canAdvance() const { return !dead; }
 	virtual void advance()
 	{
@@ -159,9 +194,9 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		field->setChanged();
 	}
 	
-	PlayerHead(int txt, size_t x, size_t y, std::shared_ptr<Field> field):
+	PlayerHead(int txt, size_t x, size_t y, std::shared_ptr<Field> field,KeyboardMapper mapper):
 		texture(txt),tail(std::make_shared<PlayerTail>(txt + 2)),
-		x(x),y(y),field(field),dead(false)
+		x(x),y(y),field(field),dead(false),kbmapper(mapper)
 	{}
 
 	void initSelf(std::shared_ptr<FieldObject> s)
@@ -179,6 +214,7 @@ private:
 	std::shared_ptr<Field> field;
 	bool dead;
 	std::shared_ptr<FieldObject> self;
+	KeyboardMapper kbmapper;
 
 	void doCrash()
 	{
@@ -191,6 +227,22 @@ private:
 		assert(t != nullptr);
 		t->died();
 	}
+} ;
+
+struct QuitNotifier: KeyboardSubscriber {
+	virtual void update(SDL_Scancode scan)
+	{
+		quit = true;
+	}
+
+	void set()
+	{
+		quit = true;
+	}
+	
+	bool isset() const { return quit; }
+private:
+	bool quit = false;
 } ;
 
 std::vector<std::shared_ptr<FieldObject>> objs;
@@ -282,7 +334,11 @@ void startgame(std::shared_ptr<Field> &field)
 {
 	auto &l = GLog::getInstance();
 	l.log("on startgame\n");
-	auto snek = std::make_shared<PlayerHead>(SnakePalette[0],5,5,field);
+	assert(SnakePalette.size() >= 1);
+	KeyboardMapper map(SDL_SCANCODE_A,SDL_SCANCODE_D,SDL_SCANCODE_W,SDL_SCANCODE_S); // WASD
+	auto snek = std::make_shared<PlayerHead>(SnakePalette[0],5,5,field,map);
+	auto &k = GKbdControl::getInstance();
+	map.subscribe(k,snek);
 	snek->initSelf(snek);
 	objs.push_back(snek);
 	l.log("after startgame\n");
@@ -301,6 +357,8 @@ void redraw(SDL_Window *w,std::shared_ptr<Field> &field)
 	}
 }
 
+
+
 int main(int argc,char **argv)
 {
 	auto &l = GLog::getInstance();
@@ -308,7 +366,7 @@ int main(int argc,char **argv)
 	l.log("hello world\n");
 	
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		l.logf("SDL_Init failed: %s",SDL_GetError());
+		l.logf("SDL_Init failed: %s\n",SDL_GetError());
 		exit(1);
 	}
 	atexit(SDL_Quit);
@@ -317,15 +375,66 @@ int main(int argc,char **argv)
 		SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,
 		field->fwidth * CELLXSIZE,field->fheight * CELLYSIZE,SDL_WINDOW_SHOWN);
 	if (!w) {
-		l.logf("failed to create window: %s",SDL_GetError());
+		l.logf("failed to create window: %s\n",SDL_GetError());
 		return 1;
 	}
+	
+	auto &k = GKbdControl::getInstance();
+	auto qn = std::make_shared<QuitNotifier>();
+	k.subscribe(qn,SDL_SCANCODE_ESCAPE);
 	
 	initPalette();
 	startgame(field);
 	redraw(w,field);
 	
-	SDL_Delay(3000);
+	for (;;) {
+		SDL_Event ev;
+		int st = 0;
+		int r;
+		// we first use PollEvent
+		// then if we find something, continue using PollEvent till we get nothing
+		// then if we find nothing, use WaitEventTimeout once
+		for (;;) {
+			if (st == 0) {
+				r = SDL_PollEvent(&ev);
+				if (!r) {
+					r = SDL_WaitEventTimeout(&ev,5);
+					if (!r)
+						break;
+					st = 1;
+				}
+				else {
+					st = 2;
+				}
+			}
+			else if (st == 1) {
+				break;
+			}
+			else if (st == 2) {
+				r = SDL_PollEvent(&ev);
+				if (!r)
+					break;
+			}
+			else
+				assert(0);
+
+			switch (ev.type) {
+				case SDL_QUIT:
+					l.log("quit event received\n");
+					qn->set();
+					break;
+				case SDL_KEYDOWN: {
+					l.log("keydown event received\n");
+					k.update(ev.key.keysym.scancode);
+					break;
+				}
+			}
+		}
+		redraw(w,field);
+		if (qn->isset())
+			break;
+	}
+	
 	SDL_DestroyWindow(w);
 	
 	return 0;

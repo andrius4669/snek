@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SDL.h"
+
 struct KeyboardSubscriber {
-	virtual void update(int keypressed) = 0;
+	virtual void update(SDL_Scancode keypressed) = 0;
 } ;

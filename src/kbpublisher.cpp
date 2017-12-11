@@ -1,11 +1,11 @@
 #include "kbpublisher.h"
 
-void KeyboardPublisher::subscribe(subscriber_t ks,int key)
+void KeyboardPublisher::subscribe(subscriber_t ks,SDL_Scancode key)
 {
-	subscribers.insert(std::pair<int,subscriber_t>(key,ks));
+	subscribers.insert(std::pair<SDL_Scancode,subscriber_t>(key,ks));
 }
 
-void KeyboardPublisher::unsubscribe(subscriber_t ks,int key)
+void KeyboardPublisher::unsubscribe(subscriber_t ks,SDL_Scancode key)
 {
 	std::pair<submap_t::iterator,submap_t::iterator> r = subscribers.equal_range(key);
 	for (;;) {
@@ -19,7 +19,7 @@ void KeyboardPublisher::unsubscribe(subscriber_t ks,int key)
 	}
 }
 
-void KeyboardPublisher::update(int key)
+void KeyboardPublisher::update(SDL_Scancode key)
 {
 	std::pair<submap_t::iterator,submap_t::iterator> r = subscribers.equal_range(key);
 	for (;;) {
