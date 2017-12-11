@@ -1,7 +1,7 @@
 MV=mv
 
 CXXSTD= -std=c++11
-CXXFLAGS= $(CXXSTD) -O2
+CXXFLAGS= $(CXXSTD) -Og -g3 -fno-inline
 CXXINCLUDE= `sdl2-config --cflags`
 LDFLAGS= `sdl2-config --libs`
 CLIENTOBJ= \
