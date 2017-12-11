@@ -3,5 +3,6 @@
 #include "SDL.h"
 
 struct KeyboardSubscriber {
-	virtual void update(SDL_Scancode keypressed) = 0;
+	typedef SDL_Keycode key_t;
+	virtual void update(key_t key) = 0;
 } ;

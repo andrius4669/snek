@@ -1,7 +1,7 @@
 MV=mv
 
 CXXSTD= -std=c++11
-CXXFLAGS= $(CXXSTD) -Og -g3 -fno-inline
+CXXFLAGS= $(CXXSTD) -Og -ggdb3 -fno-inline
 CXXINCLUDE= `sdl2-config --cflags`
 LDFLAGS= `sdl2-config --libs`
 CLIENTOBJ= \
@@ -34,6 +34,7 @@ depend:
 
 # DO NOT DELETE THIS LINE
 
-client.o: logger.h singleton.h
-config.o: config.h singleton.h
-logger.o: logger.h singleton.h config.h
+client.o: logger.h kbsubscriber.h kbpublisher.h
+config.o: config.h cpptoml/include/cpptoml.h
+kbpublisher.o: kbpublisher.h kbsubscriber.h logger.h
+logger.o: logger.h config.h cpptoml/include/cpptoml.h

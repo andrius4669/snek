@@ -61,11 +61,15 @@ struct Field {
 	
 	FOPtr &access(size_t x, size_t y)
 	{
-		return field[fwidth * y + x];
+		auto i = fwidth * y + x;
+		assert(i < field.size());
+		return field[i];
 	}
 	const FOPtr &access(size_t x, size_t y) const
 	{
-		return field[fwidth * y + x];
+		auto i = fwidth * y + x;
+		assert(i < field.size());
+		return field[i];
 	}
 	
 	FOPtr getEmpty() { return emptyobj; }
@@ -106,7 +110,11 @@ enum {
 } ;
 
 struct KeyboardMapper {
-	KeyboardMapper(SDL_Scancode l,SDL_Scancode r,SDL_Scancode u,SDL_Scancode d)
+	KeyboardMapper(
+		KeyboardSubscriber::key_t l,
+		KeyboardSubscriber::key_t r,
+		KeyboardSubscriber::key_t u,
+		KeyboardSubscriber::key_t d)
 	{
 		codes[DIR_LEFT] = l;
 		codes[DIR_RIGHT] = r;
@@ -114,7 +122,7 @@ struct KeyboardMapper {
 		codes[DIR_DOWN] = d;
 	}
 
-	void subscribe(KeyboardPublisher pub,KeyboardPublisher::subscriber_t sub)
+	void subscribe(KeyboardPublisher &pub,KeyboardPublisher::subscriber_t sub)
 	{
 		pub.subscribe(sub,codes[DIR_LEFT]);
 		pub.subscribe(sub,codes[DIR_RIGHT]);
@@ -122,7 +130,7 @@ struct KeyboardMapper {
 		pub.subscribe(sub,codes[DIR_DOWN]);
 	}
 	
-	int getDirection(SDL_Scancode scan) const
+	int getDirection(KeyboardSubscriber::key_t scan) const
 	{
 		for (int i = 0;i < DIR_NUM;++i) {
 			if (codes[i] == scan)
@@ -131,7 +139,7 @@ struct KeyboardMapper {
 		return -1;
 	}
 private:
-	SDL_Scancode codes[DIR_NUM];
+	KeyboardSubscriber::key_t codes[DIR_NUM];
 } ;
 
 struct PlayerHead: FieldObject,KeyboardSubscriber {
@@ -139,10 +147,12 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 	virtual int getHardness() const { return 1; }
 	virtual bool isDead() const { return dead; }
 
-	virtual void update(SDL_Scancode scan)
+	virtual void update(KeyboardSubscriber::key_t scan)
 	{
 		int dir = kbmapper.getDirection(scan);
 		assert(dir >= 0);
+		auto &l = GLog::getInstance();
+		l.logf("snake received direction %d\n",dir);
 		if (!directions.empty() && directions.back() == dir)
 			return;
 		if (dead)
@@ -161,7 +171,11 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		if (dead)
 			return;
 
-		size_t newx,newy;
+		auto &l = GLog::getInstance();
+		l.logf("advance with direction %d\n",dir);
+
+		size_t newx = x,newy = y;
+		assert(!!field);
 		switch (dir) {
 			case DIR_LEFT:
 				newx = (x - 1) % field->fwidth;
@@ -179,11 +193,13 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 				assert(0);
 		}
 		// check for crash
+		assert(!!field->access(newx,newy));
 		if (field->access(newx,newy)->getHardness() >= getHardness()) {
 			doCrash();
 			return;
 		}
 		// pad tail
+		assert(!!tail);
 		field->access(x,y) = tail;
 		// change our location
 		x = newx;
@@ -199,11 +215,13 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		x(x),y(y),field(field),dead(false),kbmapper(mapper)
 	{}
 
-	void initSelf(std::shared_ptr<FieldObject> s)
+	void initSelf(std::shared_ptr<PlayerHead> s)
 	{
 		assert(this == s.get());
 		self = s;
 		field->access(x,y) = s;
+		auto &k = GKbdControl::getInstance();
+		kbmapper.subscribe(k,s);
 	}
 
 private:
@@ -230,7 +248,7 @@ private:
 } ;
 
 struct QuitNotifier: KeyboardSubscriber {
-	virtual void update(SDL_Scancode scan)
+	virtual void update(KeyboardSubscriber::key_t scan)
 	{
 		quit = true;
 	}
@@ -249,7 +267,7 @@ std::vector<std::shared_ptr<FieldObject>> objs;
 
 static void advance()
 {
-	for (size_t i = 0; i < objs.size(); ++i) {
+	for (size_t i = 0;i < objs.size();++i) {
 		objs[i]->advance();
 	}
 }
@@ -335,10 +353,12 @@ void startgame(std::shared_ptr<Field> &field)
 	auto &l = GLog::getInstance();
 	l.log("on startgame\n");
 	assert(SnakePalette.size() >= 1);
-	KeyboardMapper map(SDL_SCANCODE_A,SDL_SCANCODE_D,SDL_SCANCODE_W,SDL_SCANCODE_S); // WASD
+	KeyboardMapper map(
+		SDL_SCANCODE_A,
+		SDL_SCANCODE_D,
+		SDL_SCANCODE_W,
+		SDL_SCANCODE_S); // WASD
 	auto snek = std::make_shared<PlayerHead>(SnakePalette[0],5,5,field,map);
-	auto &k = GKbdControl::getInstance();
-	map.subscribe(k,snek);
 	snek->initSelf(snek);
 	objs.push_back(snek);
 	l.log("after startgame\n");
@@ -387,6 +407,8 @@ int main(int argc,char **argv)
 	startgame(field);
 	redraw(w,field);
 	
+	unsigned int nextadvance = SDL_GetTicks();
+	
 	for (;;) {
 		SDL_Event ev;
 		int st = 0;
@@ -430,6 +452,13 @@ int main(int argc,char **argv)
 				}
 			}
 		}
+		
+		unsigned int t = SDL_GetTicks();
+		if ((int)(t - nextadvance) >= 0) {
+			advance();
+			nextadvance += 100;
+		}
+		
 		redraw(w,field);
 		if (qn->isset())
 			break;

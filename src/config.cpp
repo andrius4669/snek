@@ -13,6 +13,12 @@ Config::Config() {
 
 Config::~Config() {}
 
+Config &Config::getInstance()
+{
+	static Config instance;
+	return instance;
+}
+
 std::string Config::getLogFilename() const
 {
 	if (cfg) {

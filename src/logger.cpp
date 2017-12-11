@@ -18,6 +18,13 @@ Logger::~Logger()
 		fclose(logfile);
 }
 
+Logger &Logger::getInstance()
+{
+	static Logger instance;
+
+	return instance;
+}
+
 void Logger::log(const char *s)
 {
 	fprintf(logfile ? logfile : stderr,"%s",s);
