@@ -61,13 +61,13 @@ struct Field {
 	
 	FOPtr &access(size_t x, size_t y)
 	{
-		auto i = fwidth * y + x;
+		auto i = (fwidth * y) + x;
 		assert(i < field.size());
 		return field[i];
 	}
 	const FOPtr &access(size_t x, size_t y) const
 	{
-		auto i = fwidth * y + x;
+		auto i = (fwidth * y) + x;
 		assert(i < field.size());
 		return field[i];
 	}
@@ -174,17 +174,21 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		auto &l = GLog::getInstance();
 		l.logf("advance with direction %d\n",dir);
 
-		size_t newx = x,newy = y;
+		ssize_t newx = (ssize_t)x,newy = (ssize_t)y;
 		assert(!!field);
 		switch (dir) {
 			case DIR_LEFT:
-				newx = (x - 1) % field->fwidth;
+				newx = x - 1;
+				if (newx < 0)
+					newx = field->fwidth - 1;
 				break;
 			case DIR_RIGHT:
 				newx = (x + 1) % field->fwidth;
 				break;
 			case DIR_UP:
-				newy = (y - 1) % field->fheight;
+				newy = y - 1;
+				if (newy < 0)
+					newy = field->fheight - 1;
 				break;
 			case DIR_DOWN:
 				newy = (y + 1) % field->fheight;
