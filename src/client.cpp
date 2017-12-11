@@ -151,10 +151,31 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 	{
 		int dir = kbmapper.getDirection(scan);
 		assert(dir >= 0);
-		auto &l = GLog::getInstance();
-		l.logf("snake received direction %d\n",dir);
-		if (!directions.empty() && directions.back() == dir)
-			return;
+		//auto &l = GLog::getInstance();
+		//l.logf("snake received direction %d\n",dir);
+
+		if (!directions.empty()) {
+			if (directions.back() == dir)
+				return;
+			switch (directions.back()) {
+				case DIR_LEFT:
+					if (dir == DIR_RIGHT)
+						return;
+					break;
+				case DIR_RIGHT:
+					if (dir == DIR_LEFT)
+						return;
+					break;
+				case DIR_UP:
+					if (dir == DIR_DOWN)
+						return;
+					break;
+				case DIR_DOWN:
+					if (dir == DIR_UP)
+						return;
+					break;
+			}
+		}
 		if (dead)
 			return;
 		directions.push(dir);
@@ -368,9 +389,9 @@ void startgame(std::shared_ptr<Field> &field)
 	l.log("after startgame\n");
 }
 
-void redraw(SDL_Window *w,std::shared_ptr<Field> &field)
+void redraw(SDL_Window *w,std::shared_ptr<Field> &field,bool force)
 {
-	if (field->isChanged()) {
+	if (force || field->isChanged()) {
 		SDL_Surface *surf = SDL_GetWindowSurface(w); 
 		assert(surf != nullptr);
 
@@ -402,17 +423,20 @@ int main(int argc,char **argv)
 		l.logf("failed to create window: %s\n",SDL_GetError());
 		return 1;
 	}
-	
+
+	auto wid = SDL_GetWindowID(w);
+
 	auto &k = GKbdControl::getInstance();
 	auto qn = std::make_shared<QuitNotifier>();
 	k.subscribe(qn,SDL_SCANCODE_ESCAPE);
-	
+
 	initPalette();
 	startgame(field);
-	redraw(w,field);
-	
+
+	bool needredraw = true;
+
 	unsigned int nextadvance = SDL_GetTicks();
-	
+
 	for (;;) {
 		SDL_Event ev;
 		int st = 0;
@@ -454,16 +478,27 @@ int main(int argc,char **argv)
 					k.update(ev.key.keysym.scancode);
 					break;
 				}
+				case SDL_WINDOWEVENT:
+					if (ev.window.windowID == wid) {
+						switch (ev.window.event) {
+							case SDL_WINDOWEVENT_EXPOSED:
+							case SDL_WINDOWEVENT_SIZE_CHANGED:
+							case SDL_WINDOWEVENT_SHOWN:
+								needredraw = true;
+								break;
+						}
+					}
 			}
 		}
-		
+
 		unsigned int t = SDL_GetTicks();
-		if ((int)(t - nextadvance) >= 0) {
+		while ((int)(t - nextadvance) >= 0) {
 			advance();
 			nextadvance += 100;
 		}
-		
-		redraw(w,field);
+
+		redraw(w,field,needredraw);
+
 		if (qn->isset())
 			break;
 	}

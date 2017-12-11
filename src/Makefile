@@ -1,6 +1,6 @@
 MV=mv
 
-CXXSTD= -std=c++11
+CXXSTD= -std=c++11 -Wall
 CXXFLAGS= $(CXXSTD) -Og -ggdb3 -fno-inline
 CXXINCLUDE= `sdl2-config --cflags`
 LDFLAGS= `sdl2-config --libs`

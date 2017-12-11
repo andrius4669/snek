@@ -32,8 +32,8 @@ void KeyboardPublisher::unsubscribe(subscriber_t ks,key_t key)
 
 void KeyboardPublisher::update(key_t key)
 {
-	auto &l = GLog::getInstance();
-	l.logf("kpub: update %d\n",(int)key);
+	//auto &l = GLog::getInstance();
+	//l.logf("kpub: update %d\n",(int)key);
 	//for (auto it = subscribers.begin();it != subscribers.end();++it) {
 	//	l.logf("* %d -> %p\n",it->first,it->second.get());
 	//}
@@ -41,7 +41,7 @@ void KeyboardPublisher::update(key_t key)
 	for (;;) {
 		if (r.first == r.second)
 			break;
-		l.logf("-> %p\n",r.first->second.get());
+		//l.logf("-> %p\n",r.first->second.get());
 		r.first->second->update(key);
 		++r.first;
 	}
