@@ -363,7 +363,6 @@ struct BombItem: ItemObject {
 			dtex = player->getTexture();
 			explode = true;
 			doArea(0,true);
-			doArea(0,false);
 			doArea(1,true);
 			numsteps = 2;
 		}
@@ -372,7 +371,9 @@ struct BombItem: ItemObject {
 	virtual void advance()
 	{
 		if (explode) {
-			if (!doArea(numsteps - 1,false))
+			if (numsteps <= 4)
+				doArea(numsteps - 2,false);
+			if (numsteps >= 4 && !doArea(numsteps - 1,false))
 				finished = true;
 			doArea(numsteps,true);
 		}
@@ -384,6 +385,11 @@ struct BombItem: ItemObject {
 	
 	virtual size_t getTexture() const
 	{
+		if (explode) {
+			if (numsteps > 4)
+				return dtex;
+			return PAL_WHITE;
+		}
 		return numsteps & 1 ? dtex : PAL_WHITE;
 	}
 	
