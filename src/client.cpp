@@ -6,6 +6,7 @@
 #include "logger.h"
 #include "kbsubscriber.h"
 #include "kbpublisher.h"
+#include "palette.h"
 
 #include <memory>
 #include <vector>
@@ -27,8 +28,12 @@ struct FieldObject {
 	}
 	
 	virtual void advance() {}
-	
+
+	// whether can be reaped
 	virtual bool isDead() const = 0;
+
+	// represents activity
+	virtual bool isActive() const { return false; }
 	
 	virtual ~FieldObject() {}
 } ;
@@ -61,15 +66,15 @@ struct Field {
 	
 	FOPtr &access(size_t x, size_t y)
 	{
-		auto i = (fwidth * y) + x;
-		assert(i < field.size());
-		return field[i];
+		assert(x < fwidth);
+		assert(y < fheight);
+		return field[fwidth * y + x];
 	}
 	const FOPtr &access(size_t x, size_t y) const
 	{
-		auto i = (fwidth * y) + x;
-		assert(i < field.size());
-		return field[i];
+		assert(x < fwidth);
+		assert(y < fheight);
+		return field[fwidth * y + x];
 	}
 	
 	FOPtr getEmpty() { return emptyobj; }
@@ -142,10 +147,18 @@ private:
 	KeyboardSubscriber::key_t codes[DIR_NUM];
 } ;
 
+struct PlayerHead;
+
+struct ItemObject: FieldObject {
+	virtual int getHardness() const { return 0; }
+	virtual void onStep(std::shared_ptr<PlayerHead> player) = 0;
+} ;
+
 struct PlayerHead: FieldObject,KeyboardSubscriber {
 	virtual size_t getTexture() const { return texture; }
 	virtual int getHardness() const { return 1; }
 	virtual bool isDead() const { return dead; }
+	virtual bool isActive() const { return !dead; }
 
 	virtual void update(KeyboardSubscriber::key_t scan)
 	{
@@ -192,8 +205,8 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		if (dead)
 			return;
 
-		auto &l = GLog::getInstance();
-		l.logf("advance with direction %d\n",dir);
+		//auto &l = GLog::getInstance();
+		//l.logf("advance with direction %d\n",dir);
 
 		ssize_t newx = (ssize_t)x,newy = (ssize_t)y;
 		assert(!!field);
@@ -226,6 +239,10 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		// pad tail
 		assert(!!tail);
 		field->access(x,y) = tail;
+		// check item
+		auto itm = dynamic_cast<ItemObject *>(field->access(newx,newy).get());
+		if (itm)
+			itm->onStep(self);
 		// change our location
 		x = newx;
 		y = newy;
@@ -249,14 +266,16 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		kbmapper.subscribe(k,s);
 	}
 
+	std::shared_ptr<PlayerTail> getTail() { return tail; }
+
 private:
 	int texture;
-	std::shared_ptr<FieldObject> tail;
+	std::shared_ptr<PlayerTail> tail;
 	std::queue<int> directions;
 	size_t x,y;
 	std::shared_ptr<Field> field;
 	bool dead;
-	std::shared_ptr<FieldObject> self;
+	std::shared_ptr<PlayerHead> self;
 	KeyboardMapper kbmapper;
 
 	void doCrash()
@@ -269,6 +288,287 @@ private:
 		auto *t = dynamic_cast<PlayerTail *>(tail.get());
 		assert(t != nullptr);
 		t->died();
+	}
+} ;
+
+struct AcidItem: ItemObject {
+	AcidItem(std::shared_ptr<Field> field,size_t x,size_t y):
+		field(field),x(x),y(y)
+	{}
+	
+	virtual void onStep(std::shared_ptr<PlayerHead> player)
+	{
+		if (!bleaching) {
+			auto t = player->getTail();
+			dtex = t->getTexture();
+			for (size_t y = 0;y < field->fheight;++y) {
+				for (size_t x = 0;x < field->fwidth;++x) {
+					if (field->access(x,y) == t) {
+						field->access(x,y) = self;
+					}
+				}
+			}
+			bleaching = true;
+			numsteps = 0;
+		}
+	}
+	
+	virtual void advance()
+	{
+		if (bleaching && numsteps >= 5) {
+			finished = true;
+			for (size_t y = 0;y < field->fheight;++y) {
+				for (size_t x = 0;x < field->fwidth;++x) {
+					if (this == field->access(x,y).get()) {
+						field->access(x,y) = field->getEmpty();
+					}
+				}
+			}
+		}
+		++numsteps;
+	}
+	
+	virtual bool isDead() const { return finished; }
+
+	virtual bool isActive() const { return bleaching && !finished; }
+	
+	virtual size_t getTexture() const
+	{
+		return numsteps & 1 ? dtex : PAL_WHITE;
+	}
+
+	void initSelf(std::shared_ptr<AcidItem> s)
+	{
+		assert(this == s.get());
+		self = s;
+	}
+private:
+	std::shared_ptr<Field> field;
+	size_t x,y;
+	bool finished = false;
+	bool bleaching = false;
+	size_t numsteps = 0;
+	std::shared_ptr<AcidItem> self;
+	int dtex = PAL_IT_ACID;
+} ;
+
+struct BombItem: ItemObject {
+	BombItem(std::shared_ptr<Field> field,size_t x,size_t y):
+		field(field),x(x),y(y)
+	{}
+	
+	virtual void onStep(std::shared_ptr<PlayerHead> player)
+	{
+		if (!explode) {
+			dtex = player->getTexture();
+			explode = true;
+			doArea(0,true);
+			doArea(0,false);
+			doArea(1,true);
+			numsteps = 2;
+		}
+	}
+	
+	virtual void advance()
+	{
+		if (explode) {
+			if (!doArea(numsteps - 1,false))
+				finished = true;
+			doArea(numsteps,true);
+		}
+		++numsteps;
+	}
+	
+	virtual bool isDead() const { return finished; }
+	virtual bool isActive() const { return explode && !finished; }
+	
+	virtual size_t getTexture() const
+	{
+		return numsteps & 1 ? dtex : PAL_WHITE;
+	}
+	
+	void initSelf(std::shared_ptr<BombItem> s)
+	{
+		assert(this == s.get());
+		self = s;
+	}
+private:
+	std::shared_ptr<Field> field;
+	size_t x,y;
+	bool finished = false;
+	bool explode = false;
+	size_t numsteps = 0;
+	std::shared_ptr<BombItem> self;
+	int dtex = PAL_IT_BOMB; // distinct texture
+
+	inline bool shouldPad(size_t x,size_t y)
+	{
+		auto v = field->access(x,y).get();
+		if (v->getHardness() < 0)
+			return true;
+		auto t = dynamic_cast<PlayerTail *>(v);
+		if (t != nullptr)
+			return true;
+		// allow padding on top of other explosions
+		auto b = dynamic_cast<BombItem *>(v);
+		return b != nullptr && b->explode;
+	}
+
+	inline bool shouldClean(size_t x,size_t y)
+	{
+		return this == field->access(x,y).get();
+	}
+	
+	bool doArea(size_t count,bool pad)
+	{
+		ssize_t minx = x - count;
+		ssize_t maxx = x + count;
+		ssize_t miny = y - count;
+		ssize_t maxy = y + count;
+		// upper line
+		if (miny >= 0) {
+			auto ty = miny;
+			auto mmaxx = maxx < field->fwidth ? maxx : field->fwidth - 1;
+			for (size_t tx = minx >= 0 ? minx : 0;tx <= mmaxx;++tx) {
+				if (pad) {
+					if (shouldPad(tx,ty))
+						field->access(tx,ty) = self;
+				} else {
+					if (shouldClean(tx,ty))
+						field->access(tx,ty) = field->getEmpty();
+				}
+			}
+		}
+		// lower line
+		if (maxy < field->fheight) {
+			auto ty = maxy;
+			auto mmaxx = maxx < field->fwidth ? maxx : field->fwidth - 1;
+			for (size_t tx = minx >= 0 ? minx : 0;tx <= mmaxx;++tx) {
+				if (pad) {
+					if (shouldPad(tx,ty))
+						field->access(tx,ty) = self;
+				} else {
+					if (shouldClean(tx,ty))
+						field->access(tx,ty) = field->getEmpty();
+				}
+			}
+		}
+		// left
+		if (minx >= 0) {
+			auto tx = minx;
+			auto mmaxy = maxy < field->fheight ? maxy : field->fheight - 1;
+			for (size_t ty = miny >= 0 ? miny : 0;ty <= mmaxy;++ty) {
+				if (pad) {
+					if (shouldPad(tx,ty))
+						field->access(tx,ty) = self;
+				} else {
+					if (shouldClean(tx,ty))
+						field->access(tx,ty) = field->getEmpty();
+				}
+			}
+		}
+		// right
+		if (maxx < field->fwidth) {
+			auto tx = maxx;
+			auto mmaxy = maxy < field->fheight ? maxy : field->fheight - 1;
+			for (size_t ty = miny >= 0 ? miny : 0;ty <= mmaxy;++ty) {
+				if (pad) {
+					if (shouldPad(tx,ty))
+						field->access(tx,ty) = self;
+				} else {
+					if (shouldClean(tx,ty))
+						field->access(tx,ty) = field->getEmpty();
+				}
+			}
+		}
+		return minx >= 0 ||
+			maxx < field->fwidth ||
+			miny >= 0 ||
+			maxy < field->fheight;
+	}
+} ;
+
+struct GameMaster: FieldObject {
+	GameMaster(std::shared_ptr<Field> field):
+		field(field)
+	{}
+	
+	virtual size_t getTexture() const { return 0; }
+	virtual int getHardness() const { return -1; }
+	virtual bool isDead() const { return true; }
+	
+	virtual bool isActive() const
+	{
+		for (size_t i = 0;i < objs.size();++i) {
+			if (objs[i]->isActive())
+				return true;
+		}
+		return false;
+	}
+	
+	virtual bool canAdvance() const
+	{
+		return true;
+	}
+	
+	virtual void advance()
+	{
+		// spawn stuff regulary
+		spawnstuff();
+		// advance and reap children
+		for (size_t i = 0;i < objs.size();++i) {
+			objs[i]->advance();
+			if (objs[i]->isDead()) {
+				objs.erase(objs.begin() + i);
+				--i;
+			}
+		}
+	}
+private:
+	std::shared_ptr<Field> field;
+	std::vector<std::shared_ptr<FieldObject>> objs;
+	size_t spawnsteps = 0;
+
+	void spawnstuff()
+	{
+		if (spawnsteps >= 15) {
+			spawnsteps -= 10;
+			spawnsomething();
+		}
+		++spawnsteps;
+	}
+	
+	void spawnsomething()
+	{
+		// uhhhhhh dunno
+		for (size_t i = 0;i < 500;++i) {
+			size_t x = size_t(rand() % field->fwidth);
+			size_t y = size_t(rand() % field->fheight);
+			if (field->access(x,y)->getHardness() >= 0)
+				continue;
+			// ok put it there
+			auto itm = randomitem(x,y);
+			field->access(x,y) = itm;
+			objs.push_back(itm);
+			break;
+		}
+	}
+	
+	std::shared_ptr<ItemObject> randomitem(size_t x,size_t y)
+	{
+		int r = rand() % 2;
+		switch (r) {
+			case 0: {
+				auto t = std::make_shared<AcidItem>(field,x,y);
+				t->initSelf(t);
+				return std::move(t);
+			}
+			case 1: {
+				auto t = std::make_shared<BombItem>(field,x,y);
+				t->initSelf(t);
+				return std::move(t);
+			}
+		}
 	}
 } ;
 
@@ -288,7 +588,7 @@ private:
 	bool quit = false;
 } ;
 
-std::vector<std::shared_ptr<FieldObject>> objs;
+static std::vector<std::shared_ptr<FieldObject>> objs;
 
 static void advance()
 {
@@ -301,55 +601,59 @@ struct PaletteVal {
 	unsigned char r,g,b;
 } ;
 
-PaletteVal DefaultPaletteVal = {0,0,0};
+static PaletteVal DefaultPaletteVal = {0,0,0};
 
-std::vector<PaletteVal> Palette;
-std::vector<int> SnakePalette;
+static std::vector<PaletteVal> Palette;
+static std::vector<int> SnakePalette;
 
-void initPalette()
+static void initPalette()
 {
 	// TODO read from config
-	// empty
+	
 	Palette.push_back({15,15,0});
-	// snake 0
+	Palette.push_back({240,255,255});
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({255,0,0});
 	Palette.push_back({127,0,0});
 	Palette.push_back({200,0,0});
 	Palette.push_back({100,0,0});
-	// snake 1
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({0,255,0});
 	Palette.push_back({0,127,0});
 	Palette.push_back({0,200,0});
 	Palette.push_back({0,100,0});
-	// snake 2
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({0,0,255});
 	Palette.push_back({0,0,127});
 	Palette.push_back({0,0,200});
 	Palette.push_back({0,0,100});
-	// snake 3
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({255,255,0});
 	Palette.push_back({127,127,0});
 	Palette.push_back({200,200,0});
 	Palette.push_back({100,100,0});
-	// snake 4
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({255,0,255});
 	Palette.push_back({127,0,127});
 	Palette.push_back({200,0,200});
 	Palette.push_back({100,0,100});
-	// snake 5
+	
 	SnakePalette.push_back((int)Palette.size());
 	Palette.push_back({0,255,255});
 	Palette.push_back({0,127,127});
 	Palette.push_back({0,200,200});
 	Palette.push_back({0,100,100});
+	
+	Palette.push_back({0,255,63});
+	Palette.push_back({255,63,0});
 }
 
-void drawField(SDL_Surface *surf,const std::shared_ptr<Field> &field)
+static void drawField(SDL_Surface *surf,const std::shared_ptr<Field> &field)
 {
 	SDL_Rect rect;
 	memset(&rect,0,sizeof(rect));
@@ -368,12 +672,12 @@ void drawField(SDL_Surface *surf,const std::shared_ptr<Field> &field)
 	}
 }
 
-void drawMenu()
+static void drawMenu()
 {
 	// TODO
 }
 
-void startgame(std::shared_ptr<Field> &field)
+static void startgame(std::shared_ptr<Field> &field)
 {
 	auto &l = GLog::getInstance();
 	l.log("on startgame\n");
@@ -386,10 +690,14 @@ void startgame(std::shared_ptr<Field> &field)
 	auto snek = std::make_shared<PlayerHead>(SnakePalette[0],5,5,field,map);
 	snek->initSelf(snek);
 	objs.push_back(snek);
+	
+	auto gm = std::make_shared<GameMaster>(field);
+	objs.push_back(gm);
+	
 	l.log("after startgame\n");
 }
 
-void redraw(SDL_Window *w,std::shared_ptr<Field> &field,bool force)
+static void redraw(SDL_Window *w,std::shared_ptr<Field> &field,bool force)
 {
 	if (force || field->isChanged()) {
 		SDL_Surface *surf = SDL_GetWindowSurface(w); 
@@ -470,11 +778,11 @@ int main(int argc,char **argv)
 
 			switch (ev.type) {
 				case SDL_QUIT:
-					l.log("quit event received\n");
+					//l.log("quit event received\n");
 					qn->set();
 					break;
 				case SDL_KEYDOWN: {
-					l.log("keydown event received\n");
+					//l.log("keydown event received\n");
 					k.update(ev.key.keysym.scancode);
 					break;
 				}

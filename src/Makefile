@@ -34,7 +34,7 @@ depend:
 
 # DO NOT DELETE THIS LINE
 
-client.o: logger.h kbsubscriber.h kbpublisher.h
+client.o: logger.h kbsubscriber.h kbpublisher.h palette.h
 config.o: config.h cpptoml/include/cpptoml.h
 kbpublisher.o: kbpublisher.h kbsubscriber.h logger.h
 logger.o: logger.h config.h cpptoml/include/cpptoml.h
