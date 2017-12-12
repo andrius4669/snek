@@ -166,28 +166,28 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		assert(dir >= 0);
 		//auto &l = GLog::getInstance();
 		//l.logf("snake received direction %d\n",dir);
+		int lastdir = directions.empty() ? currdir : directions.back();
 
-		if (!directions.empty()) {
-			if (directions.back() == dir)
-				return;
-			switch (directions.back()) {
-				case DIR_LEFT:
-					if (dir == DIR_RIGHT)
-						return;
-					break;
-				case DIR_RIGHT:
-					if (dir == DIR_LEFT)
-						return;
-					break;
-				case DIR_UP:
-					if (dir == DIR_DOWN)
-						return;
-					break;
-				case DIR_DOWN:
-					if (dir == DIR_UP)
-						return;
-					break;
-			}
+		if (lastdir == dir)
+			return;
+
+		switch (lastdir) {
+			case DIR_LEFT:
+				if (dir == DIR_RIGHT)
+					return;
+				break;
+			case DIR_RIGHT:
+				if (dir == DIR_LEFT)
+					return;
+				break;
+			case DIR_UP:
+				if (dir == DIR_DOWN)
+					return;
+				break;
+			case DIR_DOWN:
+				if (dir == DIR_UP)
+					return;
+				break;
 		}
 		if (dead)
 			return;
@@ -197,12 +197,11 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 	virtual bool canAdvance() const { return !dead; }
 	virtual void advance()
 	{
-		if (directions.empty())
-			return;
-		int dir = directions.front();
-		if (directions.size() > 1)
+		if (!directions.empty()) {
+			currdir = directions.front();
 			directions.pop();
-		if (dead)
+		}
+		if (currdir < 0 || dead)
 			return;
 
 		//auto &l = GLog::getInstance();
@@ -210,7 +209,7 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 
 		ssize_t newx = (ssize_t)x,newy = (ssize_t)y;
 		assert(!!field);
-		switch (dir) {
+		switch (currdir) {
 			case DIR_LEFT:
 				newx = x - 1;
 				if (newx < 0)
@@ -272,6 +271,7 @@ private:
 	int texture;
 	std::shared_ptr<PlayerTail> tail;
 	std::queue<int> directions;
+	int currdir = -1;
 	size_t x,y;
 	std::shared_ptr<Field> field;
 	bool dead;
