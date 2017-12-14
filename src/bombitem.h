@@ -11,9 +11,9 @@ struct BombItem: ItemObject {
 	
 	virtual void onStep(std::shared_ptr<PlayerHead> player)
 	{
-		if (!explode) {
+		if (state == ST_WAITING) {
 			dtex = player->getTexture();
-			explode = true;
+			state = ST_EXPLODING;
 			doArea(0,true);
 			doArea(1,true);
 			numsteps = 2;
@@ -22,22 +22,22 @@ struct BombItem: ItemObject {
 	
 	virtual void advance()
 	{
-		if (explode) {
+		if (state == ST_EXPLODING) {
 			if (numsteps <= 4)
 				doArea(numsteps - 2,false);
 			if (numsteps >= 4 && !doArea(numsteps - 1,false))
-				finished = true;
+				state = ST_FINISHED;
 			doArea(numsteps,true);
 		}
 		++numsteps;
 	}
 	
-	virtual bool isDead() const { return finished; }
-	virtual bool isActive() const { return explode && !finished; }
+	virtual bool isDead() const { return state == ST_FINISHED; }
+	virtual bool isActive() const { return state == ST_EXPLODING; }
 	
 	virtual size_t getTexture() const
 	{
-		if (explode) {
+		if (state == ST_EXPLODING) {
 			if (numsteps > 4)
 				return dtex;
 			return PAL_WHITE;
@@ -51,10 +51,15 @@ struct BombItem: ItemObject {
 		self = s;
 	}
 private:
+	enum {
+		ST_WAITING,
+		ST_EXPLODING,
+		ST_FINISHED,
+	} ;
+
 	std::shared_ptr<Field> field;
 	size_t x,y;
-	bool finished = false;
-	bool explode = false;
+	int state = ST_WAITING;
 	size_t numsteps = 0;
 	std::shared_ptr<BombItem> self;
 	int dtex = PAL_IT_BOMB; // distinct texture
@@ -69,7 +74,7 @@ private:
 			return true;
 		// allow padding on top of other explosions
 		auto b = dynamic_cast<BombItem *>(v);
-		return b != nullptr && b->explode;
+		return b != nullptr && b->state == ST_EXPLODING;
 	}
 
 	inline bool shouldClean(size_t x,size_t y)

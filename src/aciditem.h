@@ -12,7 +12,7 @@ struct AcidItem: ItemObject {
 	
 	virtual void onStep(std::shared_ptr<PlayerHead> player)
 	{
-		if (!bleaching) {
+		if (state == ST_WAITING) {
 			auto t = player->getTail();
 			dtex = t->getTexture();
 			for (size_t y = 0;y < field->fheight;++y) {
@@ -22,15 +22,15 @@ struct AcidItem: ItemObject {
 					}
 				}
 			}
-			bleaching = true;
+			state = ST_BLEACHING;
 			numsteps = 0;
 		}
 	}
 	
 	virtual void advance()
 	{
-		if (bleaching && numsteps >= 5) {
-			finished = true;
+		if (state == ST_BLEACHING && numsteps >= 5) {
+			state = ST_FINISHED;
 			for (size_t y = 0;y < field->fheight;++y) {
 				for (size_t x = 0;x < field->fwidth;++x) {
 					if (this == field->access(x,y).get()) {
@@ -42,9 +42,9 @@ struct AcidItem: ItemObject {
 		++numsteps;
 	}
 	
-	virtual bool isDead() const { return finished; }
+	virtual bool isDead() const { return state == ST_FINISHED; }
 
-	virtual bool isActive() const { return bleaching && !finished; }
+	virtual bool isActive() const { return state == ST_BLEACHING; }
 	
 	virtual size_t getTexture() const
 	{
@@ -57,10 +57,15 @@ struct AcidItem: ItemObject {
 		self = s;
 	}
 private:
+	enum {
+		ST_WAITING,
+		ST_BLEACHING,
+		ST_FINISHED,
+	} ;
+
 	std::shared_ptr<Field> field;
 	size_t x,y;
-	bool finished = false;
-	bool bleaching = false;
+	int state = ST_WAITING;
 	size_t numsteps = 0;
 	std::shared_ptr<AcidItem> self;
 	int dtex = PAL_IT_ACID;
