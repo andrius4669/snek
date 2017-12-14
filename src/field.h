@@ -15,13 +15,11 @@ struct Field {
 		emptyobj(std::make_shared<EmptyFieldObject>()),
 		changed(true)
 	{
-		for (size_t i = 0;i < field.size();++i) {
-			field[i] = emptyobj;
-		}
+		clean();
 	}
-	
+
 	const size_t fwidth,fheight;
-	
+
 	FOPtr &access(size_t x, size_t y)
 	{
 		assert(x < fwidth);
@@ -34,7 +32,14 @@ struct Field {
 		assert(y < fheight);
 		return field[fwidth * y + x];
 	}
-	
+
+	void clean()
+	{
+		for (size_t i = 0;i < field.size();++i) {
+			field[i] = emptyobj;
+		}
+	}
+
 	FOPtr getEmpty() { return emptyobj; }
 
 	inline void setChanged() { changed = true; }

@@ -28,4 +28,3 @@ enum {
 	DIR_DOWN,
 	DIR_NUM
 } ;
-

@@ -115,6 +115,14 @@ struct PlayerHead: FieldObject,KeyboardSubscriber {
 		kbmapper.subscribe(k,s);
 	}
 
+	~PlayerHead()
+	{
+		if (self) {
+			auto &k = GKbdControl::getInstance();
+			kbmapper.unsubscribe(k,self);
+		}
+	}
+
 	std::shared_ptr<PlayerTail> getTail() { return tail; }
 
 private:

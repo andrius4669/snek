@@ -23,7 +23,15 @@ struct KeyboardMapper {
 		pub.subscribe(sub,codes[DIR_UP]);
 		pub.subscribe(sub,codes[DIR_DOWN]);
 	}
-	
+
+	void unsubscribe(KeyboardPublisher &pub,KeyboardPublisher::subscriber_t sub)
+	{
+		pub.unsubscribe(sub,codes[DIR_LEFT]);
+		pub.unsubscribe(sub,codes[DIR_RIGHT]);
+		pub.unsubscribe(sub,codes[DIR_UP]);
+		pub.unsubscribe(sub,codes[DIR_DOWN]);
+	}
+
 	int getDirection(KeyboardSubscriber::key_t scan) const
 	{
 		for (int i = 0;i < DIR_NUM;++i) {
