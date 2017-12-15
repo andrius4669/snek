@@ -72,6 +72,10 @@ private:
 		auto t = dynamic_cast<PlayerTail *>(v);
 		if (t != nullptr)
 			return true;
+		// pad on dead head
+		auto h = dynamic_cast<PlayerHead *>(v);
+		if (h != nullptr && h->isDead())
+			return true;
 		// allow padding on top of other explosions
 		auto b = dynamic_cast<BombItem *>(v);
 		return b != nullptr && b->state == ST_EXPLODING;

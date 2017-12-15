@@ -134,6 +134,15 @@ static void startgame(std::shared_ptr<Field> &field)
 	snek->initSelf(snek);
 	objs.push_back(snek);
 	
+	KeyboardMapper map2(
+		SDL_SCANCODE_LEFT,
+		SDL_SCANCODE_RIGHT,
+		SDL_SCANCODE_UP,
+		SDL_SCANCODE_DOWN); // UDLR
+	auto snek2 = std::make_shared<PlayerHead>(SnakePalette[1],FIELDX-5,5,field,map2);
+	snek2->initSelf(snek2);
+	objs.push_back(snek2);
+	
 	auto gm = std::make_shared<GameMaster>(field);
 	objs.push_back(gm);
 	
@@ -170,6 +179,12 @@ int main(int argc,char **argv)
 		field->fwidth * CELLXSIZE,field->fheight * CELLYSIZE,SDL_WINDOW_SHOWN);
 	if (!w) {
 		l.logf("failed to create window: %s\n",SDL_GetError());
+		return 1;
+	}
+
+	SDL_Renderer *renderer = SDL_CreateRenderer(w,-1,0);
+	if (!renderer) {
+		l.logf("failed to obtain renderer: %s\n",SDL_GetError());
 		return 1;
 	}
 
